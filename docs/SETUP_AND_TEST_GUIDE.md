@@ -24,45 +24,35 @@ $sources = Get-ChildItem src\main\java -Recurse -Filter '*.java' | ForEach-Objec
 
 Successful compilation creates `out\Node.class` and package folders below `out`.
 
-## 3. Configure the required five-laptop network
+## 3. Start the required ten-node configuration
 
-Use five laptops connected to the same Wi-Fi or hotspot. Each laptop runs two nodes in separate PowerShell windows.
+Open ten PowerShell windows and use the matching node ID and port below. Start Node 9 first and Node 0 last.
 
-| Laptop | Node IDs | Ports |
+| Node ID | Port |
 | --- | --- |
-| A - your laptop | 0, 1 | 8000, 8001 |
-| B | 2, 3 | 8002, 8003 |
-| C | 4, 5 | 8004, 8005 |
-| D | 6, 7 | 8006, 8007 |
-| E | 8, 9 | 8008, 8009 |
-
-On every laptop:
-
-1. Run `ipconfig` and give the Wi-Fi IPv4 address to the configuration owner.
-2. Update [config/nodes.properties](../config/nodes.properties) so each laptop address appears for its two node IDs.
-3. Pull or copy the same completed file to every laptop.
-4. In elevated PowerShell, permit the local assigned ports. For Laptop A:
+| 0 | 8000 |
+| 1 | 8001 |
+| 2 | 8002 |
+| 3 | 8003 |
+| 4 | 8004 |
+| 5 | 8005 |
+| 6 | 8006 |
+| 7 | 8007 |
+| 8 | 8008 |
+| 9 | 8009 |
 
 ```powershell
-New-NetFirewallRule -DisplayName 'CSC 4722 Nodes' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000,8001
-```
-
-Replace the port list on the other laptops.
-
-Start Node 9 first and Node 0 last:
-
-```powershell
-& 'C:\Program Files\Java\jdk-27\bin\java.exe' -cp out Node ID PORT config\nodes.properties
+& 'C:\Program Files\Java\jdk-27\bin\java.exe' -cp out Node ID PORT
 ```
 
 Node 0 begins with the token. Node 9 is the initial leader.
 
 ## 4. Verify server health before testing algorithms
 
-From any laptop, verify every configured host and port:
+For each port, request `GET /api/health`:
 
 ```powershell
-.\scripts\Test-Network.ps1 -ConfigPath config\nodes.properties
+8000..8009 | ForEach-Object { Invoke-RestMethod "http://localhost:$_/api/health" }
 ```
 
 Every response must be `{"status":"ALIVE"}`. Capture this output in `logs\integration\health.txt` for the report.
@@ -73,7 +63,7 @@ Send a known message from Node 0 to Node 1:
 
 ```powershell
 Invoke-RestMethod -Method Post -ContentType 'application/json' `
-  -Uri http://<NODE_1_WIFI_IP>:8001/api/chat `
+  -Uri http://localhost:8001/api/chat `
   -Body '{"sender_id":0,"text":"Clock test","lamport":1,"vector":[1,0,0,0,0,0,0,0,0,0]}'
 ```
 
@@ -81,7 +71,7 @@ Expected receive state on Node 1: Lamport is `2` and the vector is `[1,1,0,0,0,0
 
 ## 6. Demonstrate token-ring mutual exclusion
 
-The console interaction and token-idempotency work are assigned in [TEAM_CONTRIBUTIONS.md](TEAM_CONTRIBUTIONS.md). After those commands are implemented, use an integration test to queue score changes on several laptops. Each node must update the high-score table only after receiving the one circulating token. Capture the token-transfer terminal output and assert that all score-table replicas converge.
+Use an integration test to call `requestCriticalSection(player, delta)` on several nodes. Each node must update the high-score table only after receiving the one circulating token. Capture the token-transfer terminal output and assert that all score-table replicas converge.
 
 ## 7. Demonstrate Bully election after a leader failure
 
@@ -90,7 +80,7 @@ The console interaction and token-idempotency work are assigned in [TEAM_CONTRIB
 3. Wait at least six seconds for health probes and election requests.
 4. Check the Node 0 and Node 4 terminal output.
 
-With Nodes 0-8 available, both Node 0 and Node 4 should print that Node 8 is the new leader. Preserve the terminal output showing the failed health probe, election, and coordinator announcement.
+With Nodes 0-8 available, both should report `leader_id: 8`. Preserve the terminal output showing the failed health probe, election, and coordinator announcement.
 
 ## 8. Test matrix and evidence
 
