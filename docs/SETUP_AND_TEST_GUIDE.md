@@ -11,7 +11,19 @@ The project remains divided exactly as the brief requests:
 
 The project uses only JDK APIs (`HttpServer` and `HttpClient`). JDK 27 is fine because the build uses `--release 11`.
 
-## 2. Compile from a clean output folder
+## 2. Required software and packages
+
+Install the following on every Windows laptop:
+
+| Item | Required? | Check |
+| --- | --- | --- |
+| JDK 27 | Yes | `java --version` and `javac --version` both show 27. |
+| Windows PowerShell | Yes | Included with supported Windows versions. |
+| Git | Recommended | Run `git --version`; used to pull the same project and network file. |
+
+Do **not** install Maven, Gradle, npm, a database, a web framework, or a JSON library. The project is intentionally dependency-free and uses only Java standard-library APIs.
+
+## 3. Compile from a clean output folder
 
 Run this in PowerShell from the project folder:
 
@@ -24,7 +36,7 @@ $sources = Get-ChildItem src\main\java -Recurse -Filter '*.java' | ForEach-Objec
 
 Successful compilation creates `out\Node.class` and package folders below `out`.
 
-## 3. Configure the five-laptop network
+## 4. Configure the five-laptop network
 
 Connect all five laptops to the same Wi-Fi or hotspot. Each laptop runs two nodes in separate PowerShell windows.
 
@@ -36,18 +48,52 @@ Connect all five laptops to the same Wi-Fi or hotspot. Each laptop runs two node
 | D | 6, 7 | 8006, 8007 |
 | E | 8, 9 | 8008, 8009 |
 
-Before starting nodes:
+Complete these five steps before starting any node:
 
-1. Each laptop runs `ipconfig` and sends its Wi-Fi IPv4 address to the configuration owner.
-2. Update [config/nodes.properties](../config/nodes.properties) so each laptop address is used for its two node IDs.
-3. Copy or pull the same completed configuration file onto every laptop.
-4. In elevated PowerShell, allow the two local ports through Windows Firewall. On your laptop:
+1. **Connect every laptop to one Wi-Fi or hotspot.** In Windows, open **Settings > Network & internet > Wi-Fi**, select the shared network, and enter its password. Avoid guest Wi-Fi because it can block laptop-to-laptop traffic.
+
+   Example: all five laptops join `CSC4722-Demo`. A phone hotspot may assign addresses such as `192.168.137.10` through `192.168.137.14`.
+
+2. **Find the Wi-Fi IPv4 address on each laptop.** Run:
+
+   ```powershell
+   ipconfig
+   ```
+
+   Copy the `IPv4 Address` under `Wireless LAN adapter Wi-Fi`. Example: `192.168.137.10`.
+
+3. **Update the shared configuration.** Enter those five addresses in [config/nodes.properties](../config/nodes.properties). Each address must be repeated for its laptop's two nodes.
+
+   Example for your Laptop A when its address is `192.168.137.10`:
+
+   ```properties
+   node.0.host=192.168.137.10
+   node.0.port=8000
+   node.1.host=192.168.137.10
+   node.1.port=8001
+   ```
+
+4. **Distribute one identical configuration file.** If the configuration owner commits the file, each laptop runs:
+
+   ```powershell
+   git pull
+   ```
+
+   Otherwise, copy the completed `config\nodes.properties` file into the same location on every laptop.
+
+5. **Open the two local ports in Windows Firewall.** Run PowerShell as Administrator. On your laptop:
 
 ```powershell
 New-NetFirewallRule -DisplayName 'CSC 4722 Nodes' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000,8001
 ```
 
-Replace the port pair on the other laptops.
+Use `8002,8003` on Laptop B, `8004,8005` on C, `8006,8007` on D, and `8008,8009` on E. After nodes start, test another laptop from Laptop A:
+
+```powershell
+Test-NetConnection 192.168.137.11 -Port 8002
+```
+
+Replace `192.168.137.11` with Laptop B's Wi-Fi IPv4 address. `TcpTestSucceeded : True` confirms that the shared network and firewall rule work.
 
 Start Node 9 first and Node 0 last. Use this command format in each terminal, replacing the bracketed values:
 
@@ -64,7 +110,7 @@ On your laptop, start Node 1 and then Node 0:
 
 Node 0 begins with the token. Node 9 is the initial leader.
 
-## 4. Verify server health before testing algorithms
+## 5. Verify server health before testing algorithms
 
 From any laptop, verify every configured node:
 
@@ -75,7 +121,7 @@ From any laptop, verify every configured node:
 Every response must be `{"status":"ALIVE"}`. Capture this output in `logs\integration\health.txt` for the report.
 The script exits with an error if any configured node is unreachable.
 
-## 5. Demonstrate logical clocks and chat ordering
+## 6. Demonstrate logical clocks and chat ordering
 
 Send a known message from Node 0 to Node 1:
 
@@ -87,11 +133,11 @@ Invoke-RestMethod -Method Post -ContentType 'application/json' `
 
 Expected receive state on Node 1: Lamport is `2` and the vector is `[1,1,0,0,0,0,0,0,0,0]`. The Node 1 terminal prints its ordered chat log. Repeat with messages from more than one sender and capture that output. The primary ordering is Lamport time; sender ID deterministically breaks ties.
 
-## 6. Demonstrate token-ring mutual exclusion
+## 7. Demonstrate token-ring mutual exclusion
 
 The console score command and token-idempotency work are assigned in [TEAM_CONTRIBUTIONS.md](TEAM_CONTRIBUTIONS.md). Once complete, queue score changes on several laptops. Each node must update the high-score table only after receiving the one circulating token. Capture token-transfer output and assert that all score-table replicas converge.
 
-## 7. Demonstrate Bully election after a leader failure
+## 8. Demonstrate Bully election after a leader failure
 
 1. Confirm each terminal reports Node 9 as the initial leader.
 2. Stop the Node 9 window.
@@ -100,7 +146,7 @@ The console score command and token-idempotency work are assigned in [TEAM_CONTR
 
 With Nodes 0-8 available, both terminals should print that Node 8 is the new leader. Preserve the failed health probe, election, and coordinator announcement output.
 
-## 8. Test matrix and evidence
+## 9. Test matrix and evidence
 
 | ID | Test | Expected evidence |
 | --- | --- | --- |
@@ -117,6 +163,6 @@ With Nodes 0-8 available, both terminals should print that Node 8 is the new lea
 
 Save command output and screenshots under `logs\clocks`, `logs\token`, `logs\election`, and `logs\integration`. Use the same test IDs in the report and in team-member contribution notes.
 
-## 9. Remaining report deliverables
+## 10. Remaining report deliverables
 
 Prepare three UML sequence diagrams: chat receive/clock merge, token-ring score update, and Bully election. The report must also assign ownership of each module and include the matching test evidence.
