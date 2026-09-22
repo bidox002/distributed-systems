@@ -1,6 +1,7 @@
 package sync;
 
 import api.NetworkClient;
+import models.Peer;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,17 +14,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Bully election: the highest reachable node ID becomes coordinator. */
 public final class Election {
     private final int nodeId;
-    private final List<Integer> peerPorts;
+    private final List<Peer> peers;
     private final NetworkClient network;
     private final AtomicBoolean electionInProgress = new AtomicBoolean();
     private final Set<Integer> higherResponders = ConcurrentHashMap.newKeySet();
     private volatile int currentLeaderId;
 
-    public Election(int nodeId, List<Integer> peerPorts, NetworkClient network) {
+    public Election(int nodeId, List<Peer> peers, NetworkClient network) {
         this.nodeId = nodeId;
-        this.peerPorts = peerPorts;
+        this.peers = List.copyOf(peers);
         this.network = network;
-        this.currentLeaderId = peerPorts.size() - 1;
+        this.currentLeaderId = peers.size() - 1;
     }
 
     public int getCurrentLeaderId() { return currentLeaderId; }
@@ -36,8 +37,8 @@ public final class Election {
         payload.put("type", "ELECTION");
         payload.put("sender_id", nodeId);
         List<CompletableFuture<Boolean>> replies = new java.util.ArrayList<>();
-        for (int peerId = nodeId + 1; peerId < peerPorts.size(); peerId++) {
-            replies.add(network.postJson(peerPorts.get(peerId), "/api/election", payload)
+        for (int peerId = nodeId + 1; peerId < peers.size(); peerId++) {
+            replies.add(network.postJson(peers.get(peerId), "/api/election", payload)
                     .thenApply(response -> response.statusCode() == 200 && response.body().contains("OK"))
                     .exceptionally(error -> false));
         }
@@ -67,7 +68,7 @@ public final class Election {
 
     public void probeLeader() {
         int leader = currentLeaderId;
-        if (leader != nodeId) network.isAlive(peerPorts.get(leader)).thenAccept(alive -> { if (!alive) startElection(); });
+        if (leader != nodeId) network.isAlive(peers.get(leader)).thenAccept(alive -> { if (!alive) startElection(); });
     }
 
     private void declareLeadership() {
@@ -76,8 +77,8 @@ public final class Election {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", "COORDINATOR");
         payload.put("sender_id", nodeId);
-        for (int port : peerPorts) {
-            if (port != peerPorts.get(nodeId)) network.postJson(port, "/api/election", payload);
+        for (Peer peer : peers) {
+            if (peer.getNodeId() != nodeId) network.postJson(peer, "/api/election", payload);
         }
         System.out.println("Node " + nodeId + " is the new leader");
     }

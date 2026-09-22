@@ -1,5 +1,7 @@
 package api;
 
+import models.Peer;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -12,8 +14,8 @@ import java.util.concurrent.CompletableFuture;
 public final class NetworkClient {
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
 
-    public CompletableFuture<HttpResponse<String>> postJson(int port, String path, Map<String, Object> payload) {
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+    public CompletableFuture<HttpResponse<String>> postJson(Peer peer, String path, Map<String, Object> payload) {
+        HttpRequest request = HttpRequest.newBuilder(endpoint(peer, path))
                 .timeout(Duration.ofSeconds(3))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(Json.stringify(payload)))
@@ -21,11 +23,18 @@ public final class NetworkClient {
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    public CompletableFuture<Boolean> isAlive(int port) {
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/health"))
+    public CompletableFuture<Boolean> isAlive(Peer peer) {
+        HttpRequest request = HttpRequest.newBuilder(endpoint(peer, "/api/health"))
                 .timeout(Duration.ofSeconds(2)).GET().build();
         return client.sendAsync(request, HttpResponse.BodyHandlers.discarding())
                 .thenApply(response -> response.statusCode() == 200)
                 .exceptionally(error -> false);
+    }
+
+    private static URI endpoint(Peer peer, String path) {
+        if (!path.startsWith("/")) {
+            throw new IllegalArgumentException("Endpoint path must begin with '/'");
+        }
+        return URI.create("http://" + peer.getHost() + ":" + peer.getPort() + path);
     }
 }
