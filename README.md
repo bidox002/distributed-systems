@@ -79,6 +79,8 @@ Verify all configured peers after startup:
 .\scripts\Test-Network.ps1 -ConfigPath config\nodes.properties
 ```
 
+The check exits with an error if any configured node is unreachable.
+
 Send a test chat directly to Node 1 using the address configured for that laptop:
 
 ```powershell

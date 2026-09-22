@@ -24,38 +24,56 @@ $sources = Get-ChildItem src\main\java -Recurse -Filter '*.java' | ForEach-Objec
 
 Successful compilation creates `out\Node.class` and package folders below `out`.
 
-## 3. Start the required ten-node configuration
+## 3. Configure the five-laptop network
 
-Open ten PowerShell windows and use the matching node ID and port below. Start Node 9 first and Node 0 last.
+Connect all five laptops to the same Wi-Fi or hotspot. Each laptop runs two nodes in separate PowerShell windows.
 
-| Node ID | Port |
+| Laptop | Node IDs | Ports |
 | --- | --- |
-| 0 | 8000 |
-| 1 | 8001 |
-| 2 | 8002 |
-| 3 | 8003 |
-| 4 | 8004 |
-| 5 | 8005 |
-| 6 | 8006 |
-| 7 | 8007 |
-| 8 | 8008 |
-| 9 | 8009 |
+| A - your laptop | 0, 1 | 8000, 8001 |
+| B | 2, 3 | 8002, 8003 |
+| C | 4, 5 | 8004, 8005 |
+| D | 6, 7 | 8006, 8007 |
+| E | 8, 9 | 8008, 8009 |
+
+Before starting nodes:
+
+1. Each laptop runs `ipconfig` and sends its Wi-Fi IPv4 address to the configuration owner.
+2. Update [config/nodes.properties](../config/nodes.properties) so each laptop address is used for its two node IDs.
+3. Copy or pull the same completed configuration file onto every laptop.
+4. In elevated PowerShell, allow the two local ports through Windows Firewall. On your laptop:
 
 ```powershell
-& 'C:\Program Files\Java\jdk-27\bin\java.exe' -cp out Node ID PORT
+New-NetFirewallRule -DisplayName 'CSC 4722 Nodes' -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000,8001
+```
+
+Replace the port pair on the other laptops.
+
+Start Node 9 first and Node 0 last. Use this command format in each terminal, replacing the bracketed values:
+
+```powershell
+& 'C:\Program Files\Java\jdk-27\bin\java.exe' -cp out Node <NODE_ID> <PORT> config\nodes.properties
+```
+
+On your laptop, start Node 1 and then Node 0:
+
+```powershell
+& 'C:\Program Files\Java\jdk-27\bin\java.exe' -cp out Node 1 8001 config\nodes.properties
+& 'C:\Program Files\Java\jdk-27\bin\java.exe' -cp out Node 0 8000 config\nodes.properties
 ```
 
 Node 0 begins with the token. Node 9 is the initial leader.
 
 ## 4. Verify server health before testing algorithms
 
-For each port, request `GET /api/health`:
+From any laptop, verify every configured node:
 
 ```powershell
-8000..8009 | ForEach-Object { Invoke-RestMethod "http://localhost:$_/api/health" }
+.\scripts\Test-Network.ps1 -ConfigPath config\nodes.properties
 ```
 
 Every response must be `{"status":"ALIVE"}`. Capture this output in `logs\integration\health.txt` for the report.
+The script exits with an error if any configured node is unreachable.
 
 ## 5. Demonstrate logical clocks and chat ordering
 
@@ -63,7 +81,7 @@ Send a known message from Node 0 to Node 1:
 
 ```powershell
 Invoke-RestMethod -Method Post -ContentType 'application/json' `
-  -Uri http://localhost:8001/api/chat `
+  -Uri http://<NODE_1_WIFI_IP>:8001/api/chat `
   -Body '{"sender_id":0,"text":"Clock test","lamport":1,"vector":[1,0,0,0,0,0,0,0,0,0]}'
 ```
 
@@ -71,7 +89,7 @@ Expected receive state on Node 1: Lamport is `2` and the vector is `[1,1,0,0,0,0
 
 ## 6. Demonstrate token-ring mutual exclusion
 
-Use an integration test to call `requestCriticalSection(player, delta)` on several nodes. Each node must update the high-score table only after receiving the one circulating token. Capture the token-transfer terminal output and assert that all score-table replicas converge.
+The console score command and token-idempotency work are assigned in [TEAM_CONTRIBUTIONS.md](TEAM_CONTRIBUTIONS.md). Once complete, queue score changes on several laptops. Each node must update the high-score table only after receiving the one circulating token. Capture token-transfer output and assert that all score-table replicas converge.
 
 ## 7. Demonstrate Bully election after a leader failure
 
@@ -80,14 +98,14 @@ Use an integration test to call `requestCriticalSection(player, delta)` on sever
 3. Wait at least six seconds for health probes and election requests.
 4. Check the Node 0 and Node 4 terminal output.
 
-With Nodes 0-8 available, both should report `leader_id: 8`. Preserve the terminal output showing the failed health probe, election, and coordinator announcement.
+With Nodes 0-8 available, both terminals should print that Node 8 is the new leader. Preserve the failed health probe, election, and coordinator announcement output.
 
 ## 8. Test matrix and evidence
 
 | ID | Test | Expected evidence |
 | --- | --- | --- |
-| T01 | Start ten nodes | All ports 8000-8009 listen. |
-| T02 | Health | Every node returns `ALIVE`. |
+| T01 | Start ten nodes | All configured IP/port pairs start. |
+| T02 | Health | Every configured node returns `ALIVE`. |
 | T03 | Lamport receive | Receiver applies `max(local, incoming) + 1`. |
 | T04 | Vector receive | Receiver takes element-wise maxima, then increments its own entry. |
 | T05 | Chat ordering | Local log is sorted by logical timestamp. |

@@ -18,7 +18,7 @@ Get-Content -LiteralPath $ConfigPath | ForEach-Object {
     }
 }
 
-0..9 | ForEach-Object {
+$results = 0..9 | ForEach-Object {
     $nodeId = $_
     $hostName = $settings["node.$nodeId.host"]
     $port = $settings["node.$nodeId.port"]
@@ -32,4 +32,10 @@ Get-Content -LiteralPath $ConfigPath | ForEach-Object {
     } catch {
         [PSCustomObject]@{ Node = $nodeId; Address = "${hostName}:$port"; Status = "UNREACHABLE" }
     }
-} | Format-Table -AutoSize
+}
+
+$results | Format-Table -AutoSize
+
+if ($results.Status -contains 'UNREACHABLE') {
+    exit 1
+}
