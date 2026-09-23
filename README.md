@@ -167,3 +167,17 @@ Invoke-RestMethod -Method Post -ContentType 'application/json' `
 ```
 
 The receiving terminal prints the ordered chat log and updated Lamport/vector clocks. See [SETUP_AND_TEST_GUIDE.md](docs/SETUP_AND_TEST_GUIDE.md) for the test procedure and [TEAM_CONTRIBUTIONS.md](docs/TEAM_CONTRIBUTIONS.md) for intentionally unclaimed team tasks.
+
+## Local console commands
+
+Each node terminal also accepts commands while its HTTP server continues handling network requests:
+
+```text
+chat <nodeId> <message>  Send a timestamped chat message to one configured node.
+score <player> <delta>   Queue a score change until the node receives the token.
+show                     Display the ordered local chat log, clocks, and scoreboard.
+help                     Display the available commands.
+quit                     Stop that node process.
+```
+
+For example, at the Node 0 prompt enter `chat 1 Hello from Node 0`. Node 0 records its local send event, sends the message asynchronously to Node 1, and both terminals can use `show` to inspect their local logs. The command does not add an endpoint or dependency; it sends the required `POST /api/chat` payload through the existing JDK HTTP client.

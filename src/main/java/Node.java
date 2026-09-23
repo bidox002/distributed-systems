@@ -1,5 +1,6 @@
 import api.ChatHandler;
 import api.NetworkClient;
+import console.ConsoleController;
 import config.NodeDirectory;
 import com.sun.net.httpserver.HttpServer;
 import models.Clock;
@@ -40,12 +41,18 @@ public final class Node {
         Election election = new Election(nodeId, peers, network);
 
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
-        server.createContext("/api", new ChatHandler(clock, mutex, election));
+        ChatHandler chatHandler = new ChatHandler(clock, mutex, election);
+        server.createContext("/api", chatHandler);
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
         scheduler.scheduleAtFixedRate(election::probeLeader, 5, 5, TimeUnit.SECONDS);
         mutex.begin();
         System.out.println("Node " + nodeId + " running at " + localPeer + "; leader is Node " + election.getCurrentLeaderId());
+        new ConsoleController(nodeId, peers, clock, chatHandler, mutex, scoreboard, network, () -> {
+            server.stop(0);
+            scheduler.shutdownNow();
+            System.exit(0);
+        }).start();
         // HttpServer uses worker threads that do not by themselves keep every runtime alive.
         // Keep this node process available until it is deliberately stopped.
         new CountDownLatch(1).await();

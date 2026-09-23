@@ -54,15 +54,30 @@ public final class ChatHandler implements HttpHandler {
         int[] vector = vector(body.get("vector"));
         String text = String.valueOf(body.get("text"));
         clock.updateOnReceive(lamport, vector);
-        Message message = new Message(sender, text, lamport, vector);
+        record(new Message(sender, text, lamport, vector));
+        System.out.println("Clock after receive: Lamport=" + clock.getLamportTime()
+                + ", vector=" + Arrays.toString(clock.getVectorClock()));
+        respond(exchange, 200, status("Message Received"));
+    }
+
+    /** Records a locally sent chat event without applying receive-side clock merging. */
+    public void recordLocalMessage(Message message) {
+        record(message);
+    }
+
+    /** Returns an ordered copy for the local console without exposing mutable chat state. */
+    public List<Message> messagesSnapshot() {
+        synchronized (messages) {
+            return List.copyOf(messages);
+        }
+    }
+
+    private void record(Message message) {
         synchronized (messages) {
             messages.add(message);
             Collections.sort(messages);
             System.out.println("Ordered chat log: " + messages);
-            System.out.println("Clock after receive: Lamport=" + clock.getLamportTime()
-                    + ", vector=" + Arrays.toString(clock.getVectorClock()));
         }
-        respond(exchange, 200, status("Message Received"));
     }
 
     private void receiveToken(HttpExchange exchange) throws IOException {

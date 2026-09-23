@@ -2,12 +2,12 @@
 
 The wireless network foundation is complete: `Peer`, `NodeDirectory`, `config/nodes.properties`, network-bound HTTP startup, and the health-check script are shared infrastructure. Do not replace those interfaces without team agreement.
 
-## Member 1 and 2: Console interaction
+## Member 1 and 2: Console interaction complete
 
-- Add a non-blocking console loop to `Node`.
-- Implement `chat <nodeId> <text>`: call `Clock.tick()`, create a message using the updated clock, and send it to the configured `Peer` with `NetworkClient`.
-- Implement `score <player> <delta>` and `show` without adding REST endpoints outside the course brief.
-- Capture cross-laptop chat evidence.
+- A non-blocking console loop now runs on a dedicated daemon thread in `console.ConsoleController`.
+- `chat <nodeId> <text>` calls `Clock.tick()`, creates a message using the updated clocks, and sends it asynchronously to the configured `Peer` with `NetworkClient`.
+- `score <player> <delta>` queues a score update through the existing token coordinator; `show` prints the local ordered log, clocks, and scoreboard. No REST endpoint was added.
+- Remaining evidence task: run a console-originated chat between two laptops, save the terminal output, and ensure each member makes their own meaningful Git commit.
 
 ## Member 3 and 4: Token-ring correctness
 
