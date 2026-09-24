@@ -37,7 +37,8 @@ public final class Node {
         NetworkClient network = new NetworkClient();
         Clock clock = new Clock(nodeId, peers.size());
         Scoreboard scoreboard = new Scoreboard();
-        MutualExclusion mutex = new MutualExclusion(nodeId, peers, nodeId == 0, scoreboard, network, scheduler);
+        MutualExclusion mutex = new MutualExclusion(nodeId, peers, nodeId == 0, scoreboard,
+                network, scheduler, directory.getTokenHandoffDelayMillis());
         Election election = new Election(nodeId, peers, network);
 
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);

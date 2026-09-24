@@ -37,6 +37,8 @@ $sources = Get-ChildItem src\main\java -Recurse -Filter '*.java' | ForEach-Objec
 
 ## Configure the five laptops
 
+`config/nodes.properties` also sets `token.handoff.delay.ms` (default `750`). This is the pause before each token hand-off; with ten local nodes, a full lap takes at least about 7.5 seconds plus network time. Increase it to slow the ring for a live demonstration; all nodes should use the same value.
+
 Use the following simple allocation. Your laptop is Laptop A and runs Nodes 0 and 1.
 
 | Laptop | Nodes | Open TCP ports |

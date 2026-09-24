@@ -38,6 +38,8 @@ Successful compilation creates `out\Node.class` and package folders below `out`.
 
 ## 4. Configure the five-laptop network
 
+The shared `config/nodes.properties` includes `token.handoff.delay.ms=750`. This is the pause before each token send, so a ten-node full lap takes at least about 7.5 seconds plus network time. Raise the value on every laptop if you want a slower, easier-to-follow demonstration; hand-offs remain sequential.
+
 Connect all five laptops to the same Wi-Fi or hotspot. Each laptop runs two nodes in separate PowerShell windows.
 
 | Laptop | Node IDs | Ports |

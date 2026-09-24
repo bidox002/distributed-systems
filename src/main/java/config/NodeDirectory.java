@@ -16,11 +16,14 @@ import java.util.Set;
 /** Loads the shared five-laptop network directory from a Java properties file. */
 public final class NodeDirectory {
     public static final int NODE_COUNT = 10;
+    private static final long DEFAULT_TOKEN_HANDOFF_DELAY_MILLIS = 750;
 
     private final List<Peer> peers;
+    private final long tokenHandoffDelayMillis;
 
-    private NodeDirectory(List<Peer> peers) {
+    private NodeDirectory(List<Peer> peers, long tokenHandoffDelayMillis) {
         this.peers = Collections.unmodifiableList(new ArrayList<>(peers));
+        this.tokenHandoffDelayMillis = tokenHandoffDelayMillis;
     }
 
     public static NodeDirectory load(Path path) throws IOException {
@@ -45,7 +48,7 @@ public final class NodeDirectory {
             }
             loadedPeers.add(peer);
         }
-        return new NodeDirectory(loadedPeers);
+        return new NodeDirectory(loadedPeers, parseTokenHandoffDelay(properties));
     }
 
     public List<Peer> all() {
@@ -57,6 +60,24 @@ public final class NodeDirectory {
             throw new IllegalArgumentException("Unknown node ID: " + nodeId);
         }
         return peers.get(nodeId);
+    }
+
+    public long getTokenHandoffDelayMillis() {
+        return tokenHandoffDelayMillis;
+    }
+
+    private static long parseTokenHandoffDelay(Properties properties) {
+        String value = properties.getProperty("token.handoff.delay.ms");
+        if (value == null || value.isBlank()) return DEFAULT_TOKEN_HANDOFF_DELAY_MILLIS;
+        try {
+            long delay = Long.parseLong(value.trim());
+            if (delay < 1 || delay > 60_000) {
+                throw new IllegalArgumentException("token.handoff.delay.ms must be from 1 to 60000");
+            }
+            return delay;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("token.handoff.delay.ms must be a number", exception);
+        }
     }
 
     private static String required(Properties properties, String key) {

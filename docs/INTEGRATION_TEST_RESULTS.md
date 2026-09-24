@@ -6,7 +6,7 @@ Run date: 2026-09-24
 
 Command: `scripts/Run-Tests.ps1`
 
-Result: **PASS**. Production and test sources compiled for Java 11. The suite passed Lamport/vector clock merging, deterministic message ordering, health and leader endpoints, chat receive, token acceptance and duplicate rejection, forwarding sequence progression and large-sequence JSON precision, dashboard-originated local clock ticks, a ten-node localhost token ring with concurrent score updates and scoreboard convergence, three-node election, leader failure, and higher-node restart recovery.
+Result: **PASS**. Production and test sources compiled for Java 11. The suite passed Lamport/vector clock merging, deterministic message ordering, configured token hand-off pacing, health and leader endpoints, chat receive, token acceptance and duplicate rejection, forwarding sequence progression and large-sequence JSON precision, dashboard-originated local clock ticks, a ten-node localhost token ring with concurrent score updates and scoreboard convergence, three-node election, leader failure, and higher-node restart recovery.
 
 Evidence: [test-output.txt](../logs/tests/test-output.txt)
 

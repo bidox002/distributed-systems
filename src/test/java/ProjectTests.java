@@ -1,6 +1,7 @@
 import api.ChatHandler;
 import api.Json;
 import api.NetworkClient;
+import config.NodeDirectory;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import models.Clock;
@@ -17,6 +18,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -35,6 +37,9 @@ public final class ProjectTests {
     public static void main(String[] args) throws Exception {
         testClocksAndOrdering();
         System.out.println("PASS clock merge and deterministic message ordering");
+        NodeDirectory directory = NodeDirectory.load(Path.of("config", "nodes.properties"));
+        equal(750L, directory.getTokenHandoffDelayMillis(), "configured token hand-off delay");
+        System.out.println("PASS configured token hand-off pacing");
         testEndpointsAndTokenSequence();
         System.out.println("PASS health, leader, chat, and token endpoints (including duplicate and sequence checks)");
         testTenNodeTokenRing();

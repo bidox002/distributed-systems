@@ -19,6 +19,7 @@ public final class MutualExclusion {
     private final Scoreboard scoreboard;
     private final NetworkClient network;
     private final ScheduledExecutorService scheduler;
+    private final long handoffDelayMillis;
     private final Map<String, Integer> pendingUpdates = new LinkedHashMap<>();
     private boolean hasToken;
     private boolean transferInProgress;
@@ -29,12 +30,21 @@ public final class MutualExclusion {
 
     public MutualExclusion(int nodeId, List<Peer> peers, boolean startsWithToken, Scoreboard scoreboard,
                            NetworkClient network, ScheduledExecutorService scheduler) {
+        this(nodeId, peers, startsWithToken, scoreboard, network, scheduler, 250);
+    }
+
+    public MutualExclusion(int nodeId, List<Peer> peers, boolean startsWithToken, Scoreboard scoreboard,
+                           NetworkClient network, ScheduledExecutorService scheduler, long handoffDelayMillis) {
+        if (handoffDelayMillis < 1) {
+            throw new IllegalArgumentException("handoffDelayMillis must be positive");
+        }
         this.nodeId = nodeId;
         this.peers = List.copyOf(peers);
         this.hasToken = startsWithToken;
         this.scoreboard = scoreboard;
         this.network = network;
         this.scheduler = scheduler;
+        this.handoffDelayMillis = handoffDelayMillis;
         this.nextPeerIndex = (nodeId + 1) % peers.size();
         this.tokenId = startsWithToken ? "token-" + UUID.randomUUID() : null;
     }
@@ -109,7 +119,7 @@ public final class MutualExclusion {
                 .exceptionally(error -> {
                     retryTransfer(destination, error.getMessage());
                     return null;
-                }), 250, TimeUnit.MILLISECONDS);
+                }), handoffDelayMillis, TimeUnit.MILLISECONDS);
     }
 
     private static boolean isTokenAccepted(int statusCode, String responseBody) {
