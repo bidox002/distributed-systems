@@ -114,7 +114,7 @@ Node 0 begins with the token. Node 9 is the initial leader.
 
 ### Open the browser dashboard
 
-Once at least one node is running, open `http://localhost:8000/` (or the port of any running node) on the same laptop. To open it from another laptop, use `http://<NODE_WIFI_IP>:<PORT>/`. The dashboard shows all configured nodes, their health and known leader, and the selected node's ordered chat log, clocks, and scoreboard. Choose a node and send a chat message to deliver it to that node. The dashboard refreshes automatically every five seconds.
+Once at least one node is running, open `http://localhost:8000/` (or the port of any running node) on the same laptop. To open it from another laptop, use `http://<NODE_WIFI_IP>:<PORT>/`. The dashboard shows all configured nodes, their health and known leader, and the selected node's ordered chat log, clocks, and scoreboard. Choose a destination node and send a chat message; the dashboard uses another available node as the sender and advances that sender's local clocks before delivery. The dashboard refreshes automatically every two seconds.
 
 Keep the `gui` directory beside `config` and `out` when launching nodes. No additional software is required.
 
@@ -149,7 +149,9 @@ Expected receive state on Node 1: Lamport is `2` and the vector is `[1,1,0,0,0,0
 
 ## 7. Demonstrate token-ring mutual exclusion and duplicate rejection
 
-Each token has a stable `token_id` and a monotonically increasing `sequence_number`. A node accepts each sequence at most once. Its synchronized receive path replaces the score snapshot and applies queued score changes while it owns the token. The console prints receipt, score updates, rejected replays, and successful hand-offs (`TOKEN_HANDOFF`).
+Each token has a stable `token_id` and a monotonically increasing `sequence_number`, advanced at every hand-off. A node accepts each sequence at most once. Its synchronized receive path replaces the score snapshot and applies queued score changes while it owns the token. A successful sender hand-off requires the destination's `Token Handled` acknowledgement; duplicate or stale-token responses do not count as successful ownership transfer. The console prints receipt, score updates, rejected replays, and successful hand-offs (`TOKEN_HANDOFF`).
+
+The token ring keeps circulating while the nodes are running, even when nobody has queued a score update. This is intentional and matches the rubric's graceful-forward requirement: each node applies pending work if present, then passes the token on.
 
 Queue score changes on several laptops with `score <player> <delta>`. Use `show` to inspect each local scoreboard. Capture the `TOKEN_HANDOFF` lines and confirm the score tables converge.
 

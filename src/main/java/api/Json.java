@@ -122,7 +122,16 @@ public final class Json {
             int start = pos;
             while (pos < text.length() && "-+0123456789.eE".indexOf(text.charAt(pos)) >= 0) pos++;
             String number = text.substring(start, pos);
-            try { return number.contains(".") || number.contains("e") || number.contains("E") ? Double.valueOf(number) : Integer.valueOf(number); }
+            try {
+                if (number.contains(".") || number.contains("e") || number.contains("E")) {
+                    return Double.valueOf(number);
+                }
+                try {
+                    return Integer.valueOf(number);
+                } catch (NumberFormatException tooLargeForInteger) {
+                    return Long.valueOf(number);
+                }
+            }
             catch (NumberFormatException exception) { throw new IllegalArgumentException("Invalid number at position " + start); }
         }
 

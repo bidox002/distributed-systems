@@ -1,5 +1,6 @@
 package sync;
 
+import api.Json;
 import api.NetworkClient;
 import models.Peer;
 import models.Scoreboard;
@@ -59,6 +60,7 @@ public final class MutualExclusion {
             }
             tokenId = receivedTokenId;
             lastReceivedSequence = receivedSequence;
+            sequenceNumber = Math.max(sequenceNumber, receivedSequence);
             hasToken = true;
             nextPeerIndex = (nodeId + 1) % peers.size();
             scoreboard.replace(remoteScores);
@@ -92,7 +94,7 @@ public final class MutualExclusion {
         }
         scheduler.schedule(() -> network.postJson(destination, "/api/token", payload)
                 .thenAccept(response -> {
-                    if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    if (isTokenAccepted(response.statusCode(), response.body())) {
                         synchronized (MutualExclusion.this) {
                             hasToken = false;
                             transferInProgress = false;
@@ -100,13 +102,23 @@ public final class MutualExclusion {
                         System.out.println("TOKEN_HANDOFF token=" + tokenId + " sequence="
                                 + transferSequence + " from=" + nodeId + " to=" + destination);
                     } else {
-                        retryTransfer(destination, "HTTP " + response.statusCode());
+                        retryTransfer(destination, "token was not accepted (HTTP "
+                                + response.statusCode() + "): " + response.body());
                     }
                 })
                 .exceptionally(error -> {
                     retryTransfer(destination, error.getMessage());
                     return null;
                 }), 250, TimeUnit.MILLISECONDS);
+    }
+
+    private static boolean isTokenAccepted(int statusCode, String responseBody) {
+        if (statusCode < 200 || statusCode >= 300) return false;
+        try {
+            return "Token Handled".equals(Json.object(responseBody).get("status"));
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
     }
 
     private void retryTransfer(Peer failedPeer, String reason) {

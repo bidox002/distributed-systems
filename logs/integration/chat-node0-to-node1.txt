@@ -1,0 +1,9 @@
+
+
+Destination : Node 1 (172.16.50.71:8001)
+Request     : {"sender_id":0,"text":"Integration test T03 clock receive","lamport":1,"vector":[1,0,0,0,0,0,0,0,0,0]}
+Response    : {"status":"Message Received"}
+
+
+
+

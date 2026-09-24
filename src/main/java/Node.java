@@ -41,7 +41,7 @@ public final class Node {
         Election election = new Election(nodeId, peers, network);
 
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
-        ChatHandler chatHandler = new ChatHandler(clock, mutex, election, peers, scoreboard);
+        ChatHandler chatHandler = new ChatHandler(clock, mutex, election, peers, scoreboard, network);
         server.createContext("/api", chatHandler);
         server.createContext("/", exchange -> {
             if (!"GET".equals(exchange.getRequestMethod()) || !"/".equals(exchange.getRequestURI().getPath())) {

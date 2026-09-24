@@ -22,6 +22,13 @@ public final class Clock {
         vectorClock[nodeId]++;
     }
 
+    /** Records one local event and returns its timestamp atomically. */
+    public synchronized Timestamp tickAndSnapshot() {
+        lamportTime++;
+        vectorClock[nodeId]++;
+        return new Timestamp(lamportTime, vectorClock);
+    }
+
     /** Merges a received message clock, then records the receive event. */
     public synchronized void updateOnReceive(int incomingLamport, int[] incomingVector) {
         if (incomingVector == null || incomingVector.length != vectorClock.length) {
@@ -42,5 +49,18 @@ public final class Clock {
 
     public synchronized int[] getVectorClock() {
         return Arrays.copyOf(vectorClock, vectorClock.length);
+    }
+
+    public static final class Timestamp {
+        private final int lamport;
+        private final int[] vector;
+
+        private Timestamp(int lamport, int[] vector) {
+            this.lamport = lamport;
+            this.vector = Arrays.copyOf(vector, vector.length);
+        }
+
+        public int getLamport() { return lamport; }
+        public int[] getVector() { return Arrays.copyOf(vector, vector.length); }
     }
 }

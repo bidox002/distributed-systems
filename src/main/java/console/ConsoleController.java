@@ -150,8 +150,8 @@ public final class ConsoleController implements Runnable {
         }
 
         String messageText = parts[2].trim();
-        clock.tick();
-        Message message = new Message(nodeId, messageText, clock.getLamportTime(), clock.getVectorClock());
+        Clock.Timestamp timestamp = clock.tickAndSnapshot();
+        Message message = new Message(nodeId, messageText, timestamp.getLamport(), timestamp.getVector());
         chatHandler.recordLocalMessage(message);
 
         Map<String, Object> payload = new LinkedHashMap<>();

@@ -25,14 +25,17 @@ public final class ChatHandler implements HttpHandler {
     private final Election election;
     private final List<Peer> peers;
     private final Scoreboard scoreboard;
+    private final NetworkClient network;
     private final List<Message> messages = Collections.synchronizedList(new ArrayList<>());
 
-    public ChatHandler(Clock clock, MutualExclusion mutex, Election election, List<Peer> peers, Scoreboard scoreboard) {
+    public ChatHandler(Clock clock, MutualExclusion mutex, Election election, List<Peer> peers,
+                       Scoreboard scoreboard, NetworkClient network) {
         this.clock = clock;
         this.mutex = mutex;
         this.election = election;
         this.peers = peers;
         this.scoreboard = scoreboard;
+        this.network = network;
     }
 
     @Override
@@ -49,6 +52,7 @@ public final class ChatHandler implements HttpHandler {
             else if ("GET".equals(method) && "/api/nodes".equals(path)) receiveNodes(exchange);
             else if ("GET".equals(method) && "/api/leader".equals(path)) receiveLeader(exchange);
             else if ("POST".equals(method) && "/api/chat".equals(path)) receiveChat(exchange);
+            else if ("POST".equals(method) && "/api/chat/send".equals(path)) sendChat(exchange);
             else if ("POST".equals(method) && "/api/token".equals(path)) receiveToken(exchange);
             else if ("POST".equals(method) && "/api/election".equals(path)) receiveElection(exchange);
             else respond(exchange, 404, status("Not Found"));
@@ -92,14 +96,56 @@ public final class ChatHandler implements HttpHandler {
     private void receiveChat(HttpExchange exchange) throws IOException {
         Map<String, Object> body = body(exchange);
         int sender = integer(body, "sender_id");
+        if (sender < 0 || sender >= peers.size()) {
+            throw new IllegalArgumentException("sender_id is outside the configured node range");
+        }
         int lamport = integer(body, "lamport");
         int[] vector = vector(body.get("vector"));
-        String text = String.valueOf(body.get("text"));
+        if (!(body.get("text") instanceof String) || ((String) body.get("text")).isBlank()) {
+            throw new IllegalArgumentException("text must be a non-empty string");
+        }
+        String text = (String) body.get("text");
         clock.updateOnReceive(lamport, vector);
         record(new Message(sender, text, lamport, vector));
         System.out.println("Clock after receive: Lamport=" + clock.getLamportTime()
                 + ", vector=" + Arrays.toString(clock.getVectorClock()));
         respond(exchange, 200, status("Message Received"));
+    }
+
+    /** Ticks and records this node's send event, then asynchronously delivers it to a peer. */
+    private void sendChat(HttpExchange exchange) throws IOException {
+        Map<String, Object> body = body(exchange);
+        int destinationId = integer(body, "destination_id");
+        if (destinationId < 0 || destinationId >= peers.size() || destinationId == clock.getNodeId()) {
+            throw new IllegalArgumentException("destination_id must name a different configured node");
+        }
+        if (!(body.get("text") instanceof String) || ((String) body.get("text")).isBlank()) {
+            throw new IllegalArgumentException("text must be a non-empty string");
+        }
+
+        Clock.Timestamp timestamp = clock.tickAndSnapshot();
+        Message message = new Message(clock.getNodeId(), (String) body.get("text"),
+                timestamp.getLamport(), timestamp.getVector());
+        recordLocalMessage(message);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("sender_id", message.getSenderId());
+        payload.put("text", message.getText());
+        payload.put("lamport", message.getLamport());
+        payload.put("vector", message.getVector());
+        Peer destination = peers.get(destinationId);
+        network.postJson(destination, "/api/chat", payload).whenComplete((response, error) -> {
+            if (error != null) {
+                System.err.println("Chat delivery from Node " + clock.getNodeId() + " to Node "
+                        + destinationId + " failed: " + error.getMessage());
+            } else if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                System.err.println("Chat delivery from Node " + clock.getNodeId() + " to Node "
+                        + destinationId + " returned HTTP " + response.statusCode());
+            }
+        });
+        respond(exchange, 202, Json.stringify(Map.of("status", "Chat Queued",
+                "sender_id", message.getSenderId(), "destination_id", destinationId,
+                "lamport", message.getLamport(), "vector", message.getVector())));
     }
 
     /** Records a locally sent chat event without applying receive-side clock merging. */
@@ -124,13 +170,20 @@ public final class ChatHandler implements HttpHandler {
 
     private void receiveToken(HttpExchange exchange) throws IOException {
         Map<String, Object> body = body(exchange);
-        integer(body, "token_holder");
+        int tokenHolder = integer(body, "token_holder");
+        if (tokenHolder < 0 || tokenHolder >= peers.size() || tokenHolder == clock.getNodeId()) {
+            throw new IllegalArgumentException("token_holder must name a different configured node");
+        }
         Object sequence = body.get("sequence_number");
         if (!(body.get("token_id") instanceof String) || !(sequence instanceof Number)) {
             throw new IllegalArgumentException("Missing token_id or numeric sequence_number");
         }
-        boolean accepted = mutex.receiveToken((String) body.get("token_id"),
-                ((Number) sequence).longValue(), integerMap(body.get("scores")));
+        String tokenId = (String) body.get("token_id");
+        long sequenceNumber = ((Number) sequence).longValue();
+        if (tokenId.isBlank() || sequenceNumber < 0) {
+            throw new IllegalArgumentException("token_id must be non-empty and sequence_number non-negative");
+        }
+        boolean accepted = mutex.receiveToken(tokenId, sequenceNumber, integerMap(body.get("scores")));
         respond(exchange, 200, status(accepted ? "Token Handled" : "Duplicate Token Ignored"));
     }
 
