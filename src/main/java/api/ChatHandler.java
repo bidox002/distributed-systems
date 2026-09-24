@@ -35,6 +35,7 @@ public final class ChatHandler implements HttpHandler {
             String method = exchange.getRequestMethod();
             String path = exchange.getRequestURI().getPath();
             if ("GET".equals(method) && "/api/health".equals(path)) respond(exchange, 200, status("ALIVE"));
+            else if ("GET".equals(method) && "/api/leader".equals(path)) receiveLeader(exchange);
             else if ("POST".equals(method) && "/api/chat".equals(path)) receiveChat(exchange);
             else if ("POST".equals(method) && "/api/token".equals(path)) receiveToken(exchange);
             else if ("POST".equals(method) && "/api/election".equals(path)) receiveElection(exchange);
@@ -45,6 +46,11 @@ public final class ChatHandler implements HttpHandler {
             exception.printStackTrace();
             respond(exchange, 500, status("Internal Server Error"));
         }
+    }
+
+    /** Reports the coordinator ID currently known by this node. */
+    private void receiveLeader(HttpExchange exchange) throws IOException {
+        respond(exchange, 200, Json.stringify(Map.of("leader_id", election.getCurrentLeaderId())));
     }
 
     private void receiveChat(HttpExchange exchange) throws IOException {

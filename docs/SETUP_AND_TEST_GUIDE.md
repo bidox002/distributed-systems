@@ -121,6 +121,14 @@ From any laptop, verify every configured node:
 Every response must be `{"status":"ALIVE"}`. Capture this output in `logs\integration\health.txt` for the report.
 The script exits with an error if any configured node is unreachable.
 
+To check the coordinator currently known by a node, query its leader endpoint (replace the IP and port with any running node):
+
+```powershell
+Invoke-RestMethod http://<NODE_WIFI_IP>:8000/api/leader
+```
+
+The response contains the node ID, for example `leader_id: 9`.
+
 ## 6. Demonstrate logical clocks and chat ordering
 
 Send a known message from Node 0 to Node 1:
@@ -139,12 +147,14 @@ The console score command and token-idempotency work are assigned in [TEAM_CONTR
 
 ## 8. Demonstrate Bully election after a leader failure
 
-1. Confirm each terminal reports Node 9 as the initial leader.
+1. Confirm Node 9 announces itself as coordinator after startup.
 2. Stop the Node 9 window.
 3. Wait at least six seconds for health probes and election requests.
 4. Check the Node 0 and Node 4 terminal output.
 
 With Nodes 0-8 available, both terminals should print that Node 8 is the new leader. Preserve the failed health probe, election, and coordinator announcement output.
+
+Restart Node 9 while Node 8 is coordinator. Node 9 starts an election when it rejoins, and the running nodes should converge on Node 9 as coordinator. A live higher-ID node also starts an election if it receives a coordinator announcement from a lower-ID node.
 
 ## 9. Test matrix and evidence
 
