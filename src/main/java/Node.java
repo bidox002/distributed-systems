@@ -45,9 +45,11 @@ public final class Node {
         server.createContext("/api", chatHandler);
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
+        // A restarted node must rejoin through an election instead of assuming the previous highest ID leads.
+        election.startElection();
         scheduler.scheduleAtFixedRate(election::probeLeader, 5, 5, TimeUnit.SECONDS);
         mutex.begin();
-        System.out.println("Node " + nodeId + " running at " + localPeer + "; leader is Node " + election.getCurrentLeaderId());
+        System.out.println("Node " + nodeId + " running at " + localPeer + "; election started");
         new ConsoleController(nodeId, peers, clock, chatHandler, mutex, scoreboard, network, () -> {
             server.stop(0);
             scheduler.shutdownNow();
