@@ -170,6 +170,14 @@ The receiving terminal prints the ordered chat log and updated Lamport/vector cl
 
 ## Local console commands
 
+### Browser dashboard
+
+After compiling the project and starting any node, open `http://localhost:<PORT>/` in a browser on that laptop (for example `http://localhost:8000/`). The dashboard reads the configured cluster directory, checks node health and leader state, and lets you send a chat message to a selected node. It refreshes node state every five seconds. The `gui` folder must remain beside `config` and `out` when running the node.
+
+The dashboard is served by the node process, so no npm, web framework, or separate GUI server is needed. For another laptop to open it, use `http://<HOST_LAPTOP_WIFI_IP>:<PORT>/` and allow that node port through its firewall.
+
+## Local console commands
+
 Each node terminal also accepts commands while its HTTP server continues handling network requests:
 
 ```text

@@ -41,8 +41,22 @@ public final class Node {
         Election election = new Election(nodeId, peers, network);
 
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
-        ChatHandler chatHandler = new ChatHandler(clock, mutex, election);
+        ChatHandler chatHandler = new ChatHandler(clock, mutex, election, peers, scoreboard);
         server.createContext("/api", chatHandler);
+        server.createContext("/", exchange -> {
+            if (!"GET".equals(exchange.getRequestMethod()) || !"/".equals(exchange.getRequestURI().getPath())) {
+                byte[] missing = "Not Found".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(404, missing.length);
+                exchange.getResponseBody().write(missing);
+                exchange.close();
+                return;
+            }
+            byte[] page = java.nio.file.Files.readAllBytes(Path.of("gui", "index.html"));
+            exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+            exchange.sendResponseHeaders(200, page.length);
+            exchange.getResponseBody().write(page);
+            exchange.close();
+        });
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
         // A restarted node must rejoin through an election instead of assuming the previous highest ID leads.

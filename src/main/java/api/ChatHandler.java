@@ -4,6 +4,8 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import models.Clock;
 import models.Message;
+import models.Peer;
+import models.Scoreboard;
 import sync.Election;
 import sync.MutualExclusion;
 
@@ -21,20 +23,30 @@ public final class ChatHandler implements HttpHandler {
     private final Clock clock;
     private final MutualExclusion mutex;
     private final Election election;
+    private final List<Peer> peers;
+    private final Scoreboard scoreboard;
     private final List<Message> messages = Collections.synchronizedList(new ArrayList<>());
 
-    public ChatHandler(Clock clock, MutualExclusion mutex, Election election) {
+    public ChatHandler(Clock clock, MutualExclusion mutex, Election election, List<Peer> peers, Scoreboard scoreboard) {
         this.clock = clock;
         this.mutex = mutex;
         this.election = election;
+        this.peers = peers;
+        this.scoreboard = scoreboard;
     }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         try {
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
             String method = exchange.getRequestMethod();
             String path = exchange.getRequestURI().getPath();
-            if ("GET".equals(method) && "/api/health".equals(path)) respond(exchange, 200, status("ALIVE"));
+            if ("OPTIONS".equals(method)) respond(exchange, 204, "");
+            else if ("GET".equals(method) && "/api/health".equals(path)) respond(exchange, 200, status("ALIVE"));
+            else if ("GET".equals(method) && "/api/state".equals(path)) receiveState(exchange);
+            else if ("GET".equals(method) && "/api/nodes".equals(path)) receiveNodes(exchange);
             else if ("GET".equals(method) && "/api/leader".equals(path)) receiveLeader(exchange);
             else if ("POST".equals(method) && "/api/chat".equals(path)) receiveChat(exchange);
             else if ("POST".equals(method) && "/api/token".equals(path)) receiveToken(exchange);
@@ -46,6 +58,30 @@ public final class ChatHandler implements HttpHandler {
             exception.printStackTrace();
             respond(exchange, 500, status("Internal Server Error"));
         }
+    }
+
+    private void receiveNodes(HttpExchange exchange) throws IOException {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Peer peer : peers) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("node_id", peer.getNodeId()); item.put("host", peer.getHost()); item.put("port", peer.getPort());
+            result.add(item);
+        }
+        respond(exchange, 200, Json.stringify(result));
+    }
+
+    private void receiveState(HttpExchange exchange) throws IOException {
+        List<Map<String, Object>> log = new ArrayList<>();
+        for (Message message : messagesSnapshot()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("sender_id", message.getSenderId()); item.put("text", message.getText());
+            item.put("lamport", message.getLamport()); item.put("vector", message.getVector()); log.add(item);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("node_id", clock.getNodeId()); result.put("lamport", clock.getLamportTime());
+        result.put("vector", clock.getVectorClock()); result.put("leader_id", election.getCurrentLeaderId());
+        result.put("messages", log); result.put("scores", scoreboard.snapshot());
+        respond(exchange, 200, Json.stringify(result));
     }
 
     /** Reports the coordinator ID currently known by this node. */

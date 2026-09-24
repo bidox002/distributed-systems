@@ -112,6 +112,12 @@ Node 0 begins with the token. Node 9 is the initial leader.
 
 ## 5. Verify server health before testing algorithms
 
+### Open the browser dashboard
+
+Once at least one node is running, open `http://localhost:8000/` (or the port of any running node) on the same laptop. To open it from another laptop, use `http://<NODE_WIFI_IP>:<PORT>/`. The dashboard shows all configured nodes, their health and known leader, and the selected node's ordered chat log, clocks, and scoreboard. Choose a node and send a chat message to deliver it to that node. The dashboard refreshes automatically every five seconds.
+
+Keep the `gui` directory beside `config` and `out` when launching nodes. No additional software is required.
+
 From any laptop, verify every configured node:
 
 ```powershell

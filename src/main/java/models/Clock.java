@@ -38,6 +38,8 @@ public final class Clock {
         return lamportTime;
     }
 
+    public int getNodeId() { return nodeId; }
+
     public synchronized int[] getVectorClock() {
         return Arrays.copyOf(vectorClock, vectorClock.length);
     }
