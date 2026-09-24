@@ -11,10 +11,10 @@ The wireless network foundation is complete: `Peer`, `NodeDirectory`, `config/no
 
 ## Member 3 and 4: Token-ring correctness
 
-- Add a token identifier and sequence number to the existing `/api/token` payload.
-- Make duplicate token delivery idempotent so it cannot enter the critical section twice or produce a second token.
-- Print token receipt, critical-section entry, score change, and successful transfer.
-- Test concurrent score requests from at least three laptops and a failed successor node.
+- `/api/token` now carries a stable token identifier and increasing hand-off sequence; duplicate or stale delivery is ignored.
+- Token receipt, scoreboard critical-section entry, score changes, successful hand-off, and duplicate rejection are logged.
+- `SETUP_AND_TEST_GUIDE.md` documents a replay of the same token sequence and a failed-successor recovery check.
+- Remaining evidence task: run concurrent score requests from at least three laptops, reproduce the duplicate replay, and capture a failed-successor recovery run.
 
 ## Member 5 and 6: Bully election correctness
 

@@ -83,8 +83,13 @@ public final class ChatHandler implements HttpHandler {
     private void receiveToken(HttpExchange exchange) throws IOException {
         Map<String, Object> body = body(exchange);
         integer(body, "token_holder");
-        mutex.receiveToken(integerMap(body.get("scores")));
-        respond(exchange, 200, status("Token Handled"));
+        Object sequence = body.get("sequence_number");
+        if (!(body.get("token_id") instanceof String) || !(sequence instanceof Number)) {
+            throw new IllegalArgumentException("Missing token_id or numeric sequence_number");
+        }
+        boolean accepted = mutex.receiveToken((String) body.get("token_id"),
+                ((Number) sequence).longValue(), integerMap(body.get("scores")));
+        respond(exchange, 200, status(accepted ? "Token Handled" : "Duplicate Token Ignored"));
     }
 
     private void receiveElection(HttpExchange exchange) throws IOException {

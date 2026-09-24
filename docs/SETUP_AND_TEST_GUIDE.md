@@ -133,9 +133,23 @@ Invoke-RestMethod -Method Post -ContentType 'application/json' `
 
 Expected receive state on Node 1: Lamport is `2` and the vector is `[1,1,0,0,0,0,0,0,0,0]`. The Node 1 terminal prints its ordered chat log. Repeat with messages from more than one sender and capture that output. The primary ordering is Lamport time; sender ID deterministically breaks ties.
 
-## 7. Demonstrate token-ring mutual exclusion
+## 7. Demonstrate token-ring mutual exclusion and duplicate rejection
 
-The console score command and token-idempotency work are assigned in [TEAM_CONTRIBUTIONS.md](TEAM_CONTRIBUTIONS.md). Once complete, queue score changes on several laptops. Each node must update the high-score table only after receiving the one circulating token. Capture token-transfer output and assert that all score-table replicas converge.
+Each token has a stable `token_id` and a monotonically increasing `sequence_number`. A node accepts each sequence at most once. Its synchronized receive path replaces the score snapshot and applies queued score changes while it owns the token. The console prints receipt, score updates, rejected replays, and successful hand-offs (`TOKEN_HANDOFF`).
+
+Queue score changes on several laptops with `score <player> <delta>`. Use `show` to inspect each local scoreboard. Capture the `TOKEN_HANDOFF` lines and confirm the score tables converge.
+
+To reproduce a duplicate delivery, copy one `TOKEN_HANDOFF` line, which gives the token ID, sequence, sender, and destination. POST that same token ID and sequence a second time to the destination. For example, substitute the observed values and destination address:
+
+```powershell
+$body = '{"token_holder":0,"token_id":"token-PASTE-ID","sequence_number":1,"scores":{}}'
+Invoke-RestMethod -Method Post -ContentType 'application/json' `
+  -Uri http://<DESTINATION_WIFI_IP>:<DESTINATION_PORT>/api/token -Body $body
+```
+
+Expected response: `{"status":"Duplicate Token Ignored"}` (PowerShell displays the parsed object). The destination terminal prints `rejected duplicate or stale token`; it must not print another receipt or reapply score changes for that sequence. Use the same observed sequence; do not increment it.
+
+For failure recovery, stop the next ring node, then queue a score update on the current token holder. After the request times out, the holder logs the failed peer and retries with the next reachable node, keeping ownership until a hand-off succeeds. Restart the stopped node; it rejoins when circulation reaches it again. Confirm the score change is present after the retry and replicas converge.
 
 ## 8. Demonstrate Bully election after a leader failure
 

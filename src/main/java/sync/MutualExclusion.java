@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.UUID;
 
 /** Token-ring coordinator for all scoreboard updates. */
 public final class MutualExclusion {
@@ -21,6 +22,9 @@ public final class MutualExclusion {
     private boolean hasToken;
     private boolean transferInProgress;
     private int nextPeerIndex;
+    private String tokenId;
+    private long sequenceNumber;
+    private long lastReceivedSequence = -1;
 
     public MutualExclusion(int nodeId, List<Peer> peers, boolean startsWithToken, Scoreboard scoreboard,
                            NetworkClient network, ScheduledExecutorService scheduler) {
@@ -31,6 +35,7 @@ public final class MutualExclusion {
         this.network = network;
         this.scheduler = scheduler;
         this.nextPeerIndex = (nodeId + 1) % peers.size();
+        this.tokenId = startsWithToken ? "token-" + UUID.randomUUID() : null;
     }
 
     /** Records a requested high-score change until this node receives the token. */
@@ -43,20 +48,35 @@ public final class MutualExclusion {
         if (hasToken) forwardToken();
     }
 
-    public void receiveToken(Map<String, Integer> remoteScores) {
+    public synchronized boolean receiveToken(String receivedTokenId, long receivedSequence,
+                                             Map<String, Integer> remoteScores) {
         synchronized (this) {
+            if ((tokenId != null && !tokenId.equals(receivedTokenId))
+                    || receivedSequence <= lastReceivedSequence || hasToken) {
+                System.out.println("Node " + nodeId + " rejected duplicate or stale token "
+                        + receivedTokenId + " sequence " + receivedSequence);
+                return false;
+            }
+            tokenId = receivedTokenId;
+            lastReceivedSequence = receivedSequence;
             hasToken = true;
             nextPeerIndex = (nodeId + 1) % peers.size();
             scoreboard.replace(remoteScores);
+            System.out.println("Node " + nodeId + " received token " + tokenId
+                    + " sequence " + receivedSequence + "; entering scoreboard critical section");
             pendingUpdates.forEach(scoreboard::add);
+            pendingUpdates.forEach((player, delta) -> System.out.println("Node " + nodeId
+                    + " updated score for " + player + " by " + delta + "; scoreboard=" + scoreboard.snapshot()));
             pendingUpdates.clear();
         }
         forwardToken();
+        return true;
     }
 
     private void forwardToken() {
         final Map<String, Object> payload;
         final Peer destination;
+        final long transferSequence;
         synchronized (this) {
             if (!hasToken || transferInProgress) return;
             // Keep local ownership until the next node acknowledges the hand-off.
@@ -64,6 +84,9 @@ public final class MutualExclusion {
             transferInProgress = true;
             payload = new LinkedHashMap<>();
             payload.put("token_holder", nodeId);
+            payload.put("token_id", tokenId);
+            transferSequence = ++sequenceNumber;
+            payload.put("sequence_number", transferSequence);
             payload.put("scores", scoreboard.snapshot());
             destination = peers.get(nextPeerIndex);
         }
@@ -74,7 +97,8 @@ public final class MutualExclusion {
                             hasToken = false;
                             transferInProgress = false;
                         }
-                        System.out.println("Node " + nodeId + " passed token to " + destination);
+                        System.out.println("TOKEN_HANDOFF token=" + tokenId + " sequence="
+                                + transferSequence + " from=" + nodeId + " to=" + destination);
                     } else {
                         retryTransfer(destination, "HTTP " + response.statusCode());
                     }
