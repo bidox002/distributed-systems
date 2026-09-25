@@ -6,7 +6,7 @@ The wireless network foundation is complete: `Peer`, `NodeDirectory`, `config/no
 
 - A non-blocking console loop now runs on a dedicated daemon thread in `console.ConsoleController`.
 - `chat <nodeId> <text>` calls `Clock.tick()`, creates a message using the updated clocks, and sends it asynchronously to the configured `Peer` with `NetworkClient`.
-- `score <player> <delta>` queues a score update through the existing token coordinator; `show` prints the local ordered log, clocks, and scoreboard. No REST endpoint was added.
+- `score <player> <delta>` queues a score update through the existing token coordinator; `show` prints the local ordered log, clocks, and scoreboard. The dashboard can queue the same update through `POST /api/score`.
 - Remaining evidence task: run a console-originated chat between two laptops, save the terminal output, and ensure each member makes their own meaningful Git commit.
 
 ## Member 3 and 4: Token-ring correctness

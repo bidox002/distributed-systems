@@ -149,6 +149,7 @@ Stop a node with `Ctrl+C`. Do not start two nodes on the same port.
 | --- | --- | --- |
 | POST | `/api/chat` | Receives a chat message, merges clocks, and stores it in logical order. |
 | POST | `/api/chat/send` | Dashboard extension: ticks and records the local send event, then asynchronously sends it to the requested node. |
+| POST | `/api/score` | Queues a player's integer score delta on this node until it receives the token. |
 | POST | `/api/token` | Transfers the token and high-score table around the ring. |
 | POST | `/api/election` | Handles `ELECTION`, `OK`, and `COORDINATOR` messages. |
 | GET | `/api/health` | Returns `{"status":"ALIVE"}` for liveness checks. |

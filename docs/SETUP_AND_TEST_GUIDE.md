@@ -116,7 +116,9 @@ Node 0 begins with the token. Node 9 is the initial leader.
 
 ### Open the browser dashboard
 
-Once at least one node is running, open `http://localhost:8000/` (or the port of any running node) on the same laptop. To open it from another laptop, use `http://<NODE_WIFI_IP>:<PORT>/`. The dashboard shows all configured nodes, their health and known leader, and the selected node's ordered chat log, clocks, and scoreboard. Choose a destination node and send a chat message; the dashboard uses another available node as the sender and advances that sender's local clocks before delivery. The dashboard refreshes automatically every two seconds.
+Once at least one node is running, open `http://localhost:8000/` (or the port of any running node) on the same laptop. To open it from another laptop, use `http://<NODE_WIFI_IP>:<PORT>/`. The dashboard shows all configured nodes, their health and known leader, and the selected node's ordered chat log, clocks, and scoreboard. Chat is sent from the node serving the page to the selected destination. The dashboard refreshes automatically every two seconds.
+
+Use the **Queue score change** form to enter a player name and integer delta. It queues the change on the node serving the dashboard and applies it when that node next receives the token, matching `score <player> <delta>` in the terminal.
 
 Keep the `gui` directory beside `config` and `out` when launching nodes. No additional software is required.
 
@@ -167,7 +169,9 @@ Invoke-RestMethod -Method Post -ContentType 'application/json' `
 
 Expected response: `{"status":"Duplicate Token Ignored"}` (PowerShell displays the parsed object). The destination terminal prints `rejected duplicate or stale token`; it must not print another receipt or reapply score changes for that sequence. Use the same observed sequence; do not increment it.
 
-For failure recovery, stop the next ring node, then queue a score update on the current token holder. After the request times out, the holder logs the failed peer and retries with the next reachable node, keeping ownership until a hand-off succeeds. Restart the stopped node; it rejoins when circulation reaches it again. Confirm the score change is present after the retry and replicas converge.
+For a next-node failure, stop the next ring node. The current holder logs the failed peer, keeps the token, and retries with the next reachable node. Restart the stopped node; it rejoins when circulation reaches it again.
+
+If the token holder itself crashes, the elected coordinator checks live nodes' `/api/state` every five seconds. After two scans find no token holder, it restores the existing token using the freshest reachable score snapshot and resumes at a higher sequence number. Recovery therefore normally takes up to about ten seconds after coordinator election, plus election time. A timeout cannot distinguish a crashed node from a network partition, so only run this recovery across a network where the nodes can reach one another reliably. Token and scoreboard state are in memory: a score update applied only on the crashed holder before it passed the token may be lost. Verify with the leader-election and token-recovery log messages and confirm the reachable scoreboards converge.
 
 ## 8. Demonstrate Bully election after a leader failure
 

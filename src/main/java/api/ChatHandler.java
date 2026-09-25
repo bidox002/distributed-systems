@@ -53,6 +53,7 @@ public final class ChatHandler implements HttpHandler {
             else if ("GET".equals(method) && "/api/leader".equals(path)) receiveLeader(exchange);
             else if ("POST".equals(method) && "/api/chat".equals(path)) receiveChat(exchange);
             else if ("POST".equals(method) && "/api/chat/send".equals(path)) sendChat(exchange);
+            else if ("POST".equals(method) && "/api/score".equals(path)) queueScore(exchange);
             else if ("POST".equals(method) && "/api/token".equals(path)) receiveToken(exchange);
             else if ("POST".equals(method) && "/api/election".equals(path)) receiveElection(exchange);
             else respond(exchange, 404, status("Not Found"));
@@ -85,6 +86,7 @@ public final class ChatHandler implements HttpHandler {
         result.put("node_id", clock.getNodeId()); result.put("lamport", clock.getLamportTime());
         result.put("vector", clock.getVectorClock()); result.put("leader_id", election.getCurrentLeaderId());
         result.put("messages", log); result.put("scores", scoreboard.snapshot());
+        result.putAll(mutex.recoveryState());
         respond(exchange, 200, Json.stringify(result));
     }
 
@@ -146,6 +148,34 @@ public final class ChatHandler implements HttpHandler {
         respond(exchange, 202, Json.stringify(Map.of("status", "Chat Queued",
                 "sender_id", message.getSenderId(), "destination_id", destinationId,
                 "lamport", message.getLamport(), "vector", message.getVector())));
+    }
+
+    /** Queues a scoreboard delta on this node, to be applied when it next receives the token. */
+    private void queueScore(HttpExchange exchange) throws IOException {
+        Map<String, Object> body = body(exchange);
+        Object playerValue = body.get("player");
+        if (!(playerValue instanceof String)) {
+            throw new IllegalArgumentException("player must be a non-empty name without spaces");
+        }
+        String player = ((String) playerValue).trim();
+        if (player.isEmpty() || player.length() > 100 || player.chars().anyMatch(Character::isWhitespace)) {
+            throw new IllegalArgumentException("player must be a non-empty name of at most 100 characters without spaces");
+        }
+
+        Object deltaValue = body.get("delta");
+        if (!(deltaValue instanceof Number)) {
+            throw new IllegalArgumentException("delta must be a 32-bit integer");
+        }
+        double numericDelta = ((Number) deltaValue).doubleValue();
+        if (!Double.isFinite(numericDelta) || numericDelta != Math.rint(numericDelta)
+                || numericDelta < Integer.MIN_VALUE || numericDelta > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("delta must be a 32-bit integer");
+        }
+
+        int delta = (int) numericDelta;
+        mutex.requestCriticalSection(player, delta);
+        respond(exchange, 202, Json.stringify(Map.of("status", "Score Queued",
+                "node_id", clock.getNodeId(), "player", player, "delta", delta)));
     }
 
     /** Records a locally sent chat event without applying receive-side clock merging. */

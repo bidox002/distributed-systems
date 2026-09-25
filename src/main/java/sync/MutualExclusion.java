@@ -11,6 +11,10 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.UUID;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Token-ring coordinator for all scoreboard updates. */
 public final class MutualExclusion {
@@ -27,6 +31,9 @@ public final class MutualExclusion {
     private String tokenId;
     private long sequenceNumber;
     private long lastReceivedSequence = -1;
+    private long recoveryCount;
+    private final AtomicBoolean recoveryScanInProgress = new AtomicBoolean();
+    private int consecutiveMissingTokenScans;
 
     public MutualExclusion(int nodeId, List<Peer> peers, boolean startsWithToken, Scoreboard scoreboard,
                            NetworkClient network, ScheduledExecutorService scheduler) {
@@ -54,6 +61,129 @@ public final class MutualExclusion {
         pendingUpdates.merge(player, delta, Integer::sum);
     }
 
+    /** Exposes the local token replica state for coordinator failure-recovery scans. */
+    public synchronized Map<String, Object> recoveryState() {
+        Map<String, Object> state = new LinkedHashMap<>();
+        state.put("has_token", hasToken);
+        state.put("transfer_in_progress", transferInProgress);
+        state.put("token_id", tokenId);
+        state.put("sequence_number", sequenceNumber);
+        state.put("last_received_sequence", lastReceivedSequence);
+        state.put("token_recoveries", recoveryCount);
+        return state;
+    }
+
+    /**
+     * A coordinator may restore a lost token after two complete scans find no live owner.
+     * Network partitions can still look like crashes, as with any timeout-based failure detector.
+     */
+    public void checkForLostToken(boolean isCoordinator) {
+        if (!isCoordinator || !recoveryScanInProgress.compareAndSet(false, true)) return;
+        List<CompletableFuture<Map<String, Object>>> requests = new java.util.ArrayList<>();
+        for (Peer peer : peers) {
+            if (peer.getNodeId() == nodeId) continue;
+            requests.add(network.get(peer, "/api/state").thenApply(response -> {
+                if (response.statusCode() != 200) return null;
+                try { return Json.object(response.body()); }
+                catch (IllegalArgumentException ignored) { return null; }
+            }).exceptionally(error -> null));
+        }
+        CompletableFuture.allOf(requests.toArray(new CompletableFuture<?>[0]))
+                .whenComplete((ignored, error) -> {
+                    try {
+                        List<Map<String, Object>> states = new java.util.ArrayList<>();
+                        states.add(localRecoveryState());
+                        for (CompletableFuture<Map<String, Object>> request : requests) {
+                            Map<String, Object> state = request.getNow(null);
+                            if (state != null) states.add(state);
+                        }
+                        inspectRecoveryStates(states);
+                    } finally {
+                        recoveryScanInProgress.set(false);
+                    }
+                });
+    }
+
+    private synchronized Map<String, Object> localRecoveryState() {
+        Map<String, Object> state = recoveryState();
+        state.put("leader_id", nodeId);
+        state.put("node_id", nodeId);
+        state.put("scores", scoreboard.snapshot());
+        return state;
+    }
+
+    private void inspectRecoveryStates(List<Map<String, Object>> states) {
+        String observedTokenId = null;
+        long maxSequence = -1;
+        Map<String, Integer> freshestScores = null;
+        boolean tokenExists = false;
+        boolean consistentLeadership = true;
+        Set<String> tokenIds = new HashSet<>();
+
+        for (Map<String, Object> state : states) {
+            if (!(state.get("leader_id") instanceof Number)
+                    || ((Number) state.get("leader_id")).intValue() != nodeId) {
+                consistentLeadership = false;
+            }
+            Object id = state.get("token_id");
+            if (id instanceof String && !((String) id).isBlank()) tokenIds.add((String) id);
+            if (Boolean.TRUE.equals(state.get("has_token"))) tokenExists = true;
+            long stateSequence = number(state.get("sequence_number"), -1);
+            long receivedSequence = number(state.get("last_received_sequence"), -1);
+            long freshestSequence = Math.max(stateSequence, receivedSequence);
+            if (freshestSequence > maxSequence && state.get("scores") instanceof Map) {
+                maxSequence = freshestSequence;
+                freshestScores = integerMap((Map<?, ?>) state.get("scores"));
+            }
+        }
+
+        synchronized (this) {
+            if (!consistentLeadership || tokenExists) {
+                consecutiveMissingTokenScans = 0;
+                return;
+            }
+            if (tokenIds.size() != 1) {
+                consecutiveMissingTokenScans = 0;
+                if (tokenIds.size() > 1) System.err.println("Node " + nodeId
+                        + " cannot recover token: live nodes report conflicting token IDs " + tokenIds);
+                return;
+            }
+            if (maxSequence < 0 || freshestScores == null) {
+                consecutiveMissingTokenScans = 0;
+                return;
+            }
+            consecutiveMissingTokenScans++;
+            if (consecutiveMissingTokenScans < 2 || hasToken || transferInProgress) return;
+            observedTokenId = tokenIds.iterator().next();
+            tokenId = observedTokenId;
+            sequenceNumber = Math.max(sequenceNumber, maxSequence);
+            lastReceivedSequence = Math.max(lastReceivedSequence, maxSequence);
+            scoreboard.replace(freshestScores);
+            hasToken = true;
+            transferInProgress = false;
+            applyPendingUpdates();
+            recoveryCount++;
+            consecutiveMissingTokenScans = 0;
+        }
+        System.err.println("Node " + nodeId + " recovered token " + observedTokenId
+                + " after two scans found no live holder; resuming at sequence " + (maxSequence + 1));
+        forwardToken();
+    }
+
+    private static long number(Object value, long fallback) {
+        return value instanceof Number ? ((Number) value).longValue() : fallback;
+    }
+
+    private static Map<String, Integer> integerMap(Map<?, ?> values) {
+        Map<String, Integer> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : values.entrySet()) {
+            if (entry.getValue() instanceof Number) {
+                result.put(String.valueOf(entry.getKey()), ((Number) entry.getValue()).intValue());
+            }
+        }
+        return result;
+    }
+
     /** Starts the logical ring after this node's HTTP server is available. */
     public void begin() {
         if (hasToken) forwardToken();
@@ -76,13 +206,17 @@ public final class MutualExclusion {
             scoreboard.replace(remoteScores);
             System.out.println("Node " + nodeId + " received token " + tokenId
                     + " sequence " + receivedSequence + "; entering scoreboard critical section");
-            pendingUpdates.forEach(scoreboard::add);
-            pendingUpdates.forEach((player, delta) -> System.out.println("Node " + nodeId
-                    + " updated score for " + player + " by " + delta + "; scoreboard=" + scoreboard.snapshot()));
-            pendingUpdates.clear();
+            applyPendingUpdates();
         }
         forwardToken();
         return true;
+    }
+
+    private void applyPendingUpdates() {
+        pendingUpdates.forEach(scoreboard::add);
+        pendingUpdates.forEach((player, delta) -> System.out.println("Node " + nodeId
+                + " updated score for " + player + " by " + delta + "; scoreboard=" + scoreboard.snapshot()));
+        pendingUpdates.clear();
     }
 
     private void forwardToken() {

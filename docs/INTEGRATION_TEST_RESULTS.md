@@ -6,7 +6,7 @@ Run date: 2026-09-24
 
 Command: `scripts/Run-Tests.ps1`
 
-Result: **PASS**. Production and test sources compiled for Java 11. The suite passed Lamport/vector clock merging, deterministic message ordering, configured token hand-off pacing, health and leader endpoints, chat receive, token acceptance and duplicate rejection, forwarding sequence progression and large-sequence JSON precision, dashboard-originated local clock ticks, a ten-node localhost token ring with concurrent score updates and scoreboard convergence, three-node election, leader failure, and higher-node restart recovery.
+Result: **PASS**. Production and test sources compiled for Java 11. The suite passed Lamport/vector clock merging, deterministic message ordering, configured token hand-off pacing, health and leader endpoints, chat receive, token acceptance and duplicate rejection, forwarding sequence progression and large-sequence JSON precision, dashboard-originated local clock ticks, a ten-node localhost token ring with concurrent score updates and scoreboard convergence, recovery by a newly elected coordinator after the token-holding coordinator crashes in a three-node localhost ring, three-node election, leader failure, and higher-node restart recovery.
 
 Evidence: [test-output.txt](../logs/tests/test-output.txt)
 
@@ -28,6 +28,7 @@ Evidence files: [health.txt](../logs/integration/health.txt), [chat-node0-to-nod
 | T08 | Normal Bully election across laptops | [ ] Pending | Three-node loopback election passed; full-cluster convergence was not verified. |
 | T09 | Leader failure and recovery across laptops | [ ] Pending | Three-node loopback failure recovery passed; full-cluster recovery was not verified. |
 | T10 | Restart Node 9 after Node 8 takes over | [ ] Pending | Three-node loopback higher-node restart passed; full-cluster behavior was not verified. |
+| T11 | Token-holder crash recovery | [ ] Local PASS | Three-node loopback test stopped Node 2 while it held the token and was coordinator; Node 1 was elected and recovered the token, then carried a queued score update around the failed node. Multi-laptop recovery remains unverified. |
 
 ## Remaining network evidence
 

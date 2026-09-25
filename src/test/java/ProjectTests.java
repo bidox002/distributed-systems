@@ -44,6 +44,8 @@ public final class ProjectTests {
         System.out.println("PASS health, leader, chat, and token endpoints (including duplicate and sequence checks)");
         testTenNodeTokenRing();
         System.out.println("PASS ten-node token circulation and scoreboard convergence");
+        testTokenHolderCrashRecovery();
+        System.out.println("PASS token recovery after the current holder crashes");
         testElectionAndRestartRecovery();
         System.out.println("PASS three-node election, leader failure, and higher-node restart recovery");
         System.out.println("ALL TESTS PASSED");
@@ -242,6 +244,57 @@ public final class ProjectTests {
             }, 15000, "concurrent score updates to travel through all ten token holders");
         } finally {
             scheduler.shutdownNow();
+            for (HttpServer server : servers) if (server != null) server.stop(0);
+        }
+    }
+
+    private static void testTokenHolderCrashRecovery() throws Exception {
+        final int count = 3;
+        HttpServer[] servers = new HttpServer[count];
+        MutualExclusion[] mutexes = new MutualExclusion[count];
+        Scoreboard[] scoreboards = new Scoreboard[count];
+        Election[] elections = new Election[count];
+        ScheduledExecutorService[] schedulers = new ScheduledExecutorService[count];
+        NetworkClient network = new NetworkClient();
+        List<Peer> peers = new ArrayList<>();
+        try {
+            for (int id = 0; id < count; id++) {
+                servers[id] = server();
+                peers.add(new Peer(id, "127.0.0.1", servers[id].getAddress().getPort()));
+            }
+            for (int id = 0; id < count; id++) {
+                schedulers[id] = Executors.newScheduledThreadPool(2);
+                elections[id] = new Election(id, peers, network);
+                elections[id].handleCoordinatorMessage(2);
+                scoreboards[id] = new Scoreboard();
+                mutexes[id] = new MutualExclusion(id, peers, id == 0, scoreboards[id],
+                        network, schedulers[id], 1000);
+                servers[id].createContext("/api", new ChatHandler(new Clock(id, count), mutexes[id],
+                        elections[id], peers, scoreboards[id], network));
+                servers[id].start();
+            }
+
+            mutexes[0].begin();
+            await(() -> Boolean.TRUE.equals(mutexes[2].recoveryState().get("has_token")),
+                    5000, "Node 2 to receive token before crashing as coordinator");
+            servers[2].stop(0);
+            schedulers[2].shutdownNow();
+            elections[1].startElection();
+            await(() -> elections[0].getCurrentLeaderId() == 1 && elections[1].getCurrentLeaderId() == 1,
+                    7000, "Node 1 to become coordinator after token-holder failure");
+
+            mutexes[1].requestCriticalSection("alice", 10);
+            mutexes[1].checkForLostToken(true);
+            Thread.sleep(150);
+            mutexes[1].checkForLostToken(true);
+            await(() -> Map.of("alice", 10).equals(scoreboards[0].snapshot())
+                            && Map.of("alice", 10).equals(scoreboards[1].snapshot())
+                            && ((Number) mutexes[1].recoveryState().get("token_recoveries")).longValue() > 0,
+                    6000, "new coordinator to recover token and carry a queued score update around failed node");
+        } finally {
+            for (ScheduledExecutorService scheduler : schedulers) {
+                if (scheduler != null) scheduler.shutdownNow();
+            }
             for (HttpServer server : servers) if (server != null) server.stop(0);
         }
     }

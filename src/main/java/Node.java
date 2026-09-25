@@ -63,6 +63,8 @@ public final class Node {
         // A restarted node must rejoin through an election instead of assuming the previous highest ID leads.
         election.startElection();
         scheduler.scheduleAtFixedRate(election::probeLeader, 5, 5, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(() ->
+                mutex.checkForLostToken(election.getCurrentLeaderId() == nodeId), 15, 5, TimeUnit.SECONDS);
         mutex.begin();
         System.out.println("Node " + nodeId + " running at " + localPeer + "; election started");
         new ConsoleController(nodeId, peers, clock, chatHandler, mutex, scoreboard, network, () -> {

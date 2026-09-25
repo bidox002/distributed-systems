@@ -23,6 +23,12 @@ public final class NetworkClient {
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
     }
 
+    public CompletableFuture<HttpResponse<String>> get(Peer peer, String path) {
+        HttpRequest request = HttpRequest.newBuilder(endpoint(peer, path))
+                .timeout(Duration.ofSeconds(2)).GET().build();
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+    }
+
     public CompletableFuture<Boolean> isAlive(Peer peer) {
         HttpRequest request = HttpRequest.newBuilder(endpoint(peer, "/api/health"))
                 .timeout(Duration.ofSeconds(2)).GET().build();
