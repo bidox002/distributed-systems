@@ -2,6 +2,8 @@
 
 CSC 4722 course project implemented with Java 11 standard-library APIs only. Ten nodes run across five laptops on the same Wi-Fi or hotspot network.
 
+Sequence diagrams for chat clocks, token-ring score updates, Bully election, and token recovery are in [docs/UML_SEQUENCE_DIAGRAMS.md](docs/UML_SEQUENCE_DIAGRAMS.md).
+
 ## Required software and packages
 
 Install these on every laptop before the group session:
